@@ -1,0 +1,9 @@
+syntax: glob
+
+; ignore temp/build directories
+msvc10/Debug*/
+msvc10/Release*/
+
+; ignore user files
+*.suo
+*.user
