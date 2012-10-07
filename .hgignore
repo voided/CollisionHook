@@ -4,6 +4,10 @@ syntax: glob
 msvc10/Debug*/
 msvc10/Release*/
 
+; build outputs we don't need
+extensions/*.exp
+extensions/*.lib
+
 ; ignore user files
 *.suo
 *.user
