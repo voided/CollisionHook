@@ -378,6 +378,8 @@
     <TargetName Condition="'$(Configuration)|$(Platform)'=='Release - Bloody Good Time|Win32'">sample.ext.2.bgt</TargetName>
     <TargetName Condition="'$(Configuration)|$(Platform)'=='Release - EYE|Win32'">sample.ext.2.eye</TargetName>
     <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">sample.ext</TargetName>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release - Orange Box Valve|Win32'">$(SolutionDir)..\sourcemod\extensions\</OutDir>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug - Orange Box Valve|Win32'">$(SolutionDir)..\sourcemod\extensions\</OutDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
