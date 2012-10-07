@@ -52,6 +52,7 @@ DETOUR_DECL_STATIC2( PassServerEntityFilterFunc, bool, const IHandleEntity *, pT
 	cell_t ent1 = gamehelpers->EntityToBCompatRef( pEnt1 );
 	cell_t ent2 = gamehelpers->EntityToBCompatRef( pEnt2 );
 
+	// todo: do we want to fill result with with the game's result? perhaps the forward path is more performant...
 	cell_t result = 0;
 	g_pPassFwd->PushCell( ent1 );
 	g_pPassFwd->PushCell( ent2 );
@@ -66,6 +67,7 @@ DETOUR_DECL_STATIC2( PassServerEntityFilterFunc, bool, const IHandleEntity *, pT
 		return result == 1;
 	}
 
+	// otherwise, game decides
 	return DETOUR_STATIC_CALL( PassServerEntityFilterFunc )( pTouch, pPass );
 }
 
@@ -133,7 +135,16 @@ bool CollisionHook::SDK_OnMetamodUnload(char *error, size_t maxlength)
 
 IPhysicsEnvironment *CollisionHook::CreateEnvironment()
 {
+	// in order to hook IPhysicsCollisionSolver::ShouldCollide, we need to know when a solver is installed
+	// in order to hook any installed solvers, we need to hook any created physics environments
+
 	IPhysicsEnvironment *pEnvironment = SH_CALL( g_pPhysics, &IPhysics::CreateEnvironment )();
+
+	Assert( pEnvironment );
+	if ( !pEnvironment )
+		RETURN_META_VALUE( MRES_SUPERCEDE, pEnvironment ); // just in case
+
+	// hook so we know when a solver is installed
 	SH_ADD_HOOK( IPhysicsEnvironment, SetCollisionSolver, pEnvironment, SH_MEMBER( this, &CollisionHook::SetCollisionSolver ), false );
 
 	RETURN_META_VALUE( MRES_SUPERCEDE, pEnvironment );
@@ -141,6 +152,11 @@ IPhysicsEnvironment *CollisionHook::CreateEnvironment()
 
 void CollisionHook::SetCollisionSolver( IPhysicsCollisionSolver *pSolver )
 {
+	Assert( pSolver );
+	if ( !pSolver )
+		RETURN_META( MRES_IGNORED ); // this shouldn't happen, but knowing valve...
+
+	// the game is installing a solver, hook the func we want
 	SH_ADD_HOOK( IPhysicsCollisionSolver, ShouldCollide, pSolver, SH_MEMBER( this, &CollisionHook::VPhysics_ShouldCollide ), false );
 
 	RETURN_META( MRES_IGNORED );
@@ -163,6 +179,7 @@ int CollisionHook::VPhysics_ShouldCollide( IPhysicsObject *pObj1, IPhysicsObject
 	cell_t ent1 = gamehelpers->EntityToBCompatRef( pEnt1 );
 	cell_t ent2 = gamehelpers->EntityToBCompatRef( pEnt2 );
 
+	// todo: do we want to fill result with with the game's result? perhaps the forward path is more performant...
 	cell_t result = 0;
 	g_pCollisionFwd->PushCell( ent1 );
 	g_pCollisionFwd->PushCell( ent2 );
@@ -177,5 +194,6 @@ int CollisionHook::VPhysics_ShouldCollide( IPhysicsObject *pObj1, IPhysicsObject
 		RETURN_META_VALUE( MRES_SUPERCEDE, result == 1 );
 	}
 
+	// otherwise, game decides
 	RETURN_META_VALUE( MRES_IGNORED, 0 );
 }

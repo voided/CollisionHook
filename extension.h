@@ -91,6 +91,7 @@ public: // hooks
 
 };
 
+// adapted from util_shared.h
 inline const CBaseEntity *UTIL_EntityFromEntityHandle( const IHandleEntity *pConstHandleEntity )
 {
 	IHandleEntity *pHandleEntity = const_cast<IHandleEntity *>( pConstHandleEntity );
