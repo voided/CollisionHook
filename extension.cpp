@@ -6,7 +6,6 @@
 #include "detours.h"
 
 #include "vphysics_interface.h"
-#include "cbase.h"
 #include "ihandleentity.h"
 
 #include "tier1/strtools.h"
