@@ -100,7 +100,14 @@ endif
 # if ENGINE is original or OB
 ifneq (,$(filter original orangebox,$(ENGINE)))
 	LIB_SUFFIX = _i486.$(LIB_EXT)
-else
+else ifeq "$(ENGINE)" "orangeboxvalve"
+	LIB_PREFIX = lib
+	ifneq "$(OS)" "Darwin"
+		LIB_SUFFIX = _srv.$(LIB_EXT)
+	else
+		LIB_SUFFIX = .$(LIB_EXT)
+	endif
+else	
 	LIB_PREFIX = lib
 	LIB_SUFFIX = .$(LIB_EXT)
 endif
