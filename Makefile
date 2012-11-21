@@ -16,7 +16,7 @@ MMSOURCE19 = ../mmsource-1.9
 #####################################
 
 PROJECT = collisionhook.ext
-OBJECTS = extension.cpp sdk/smsdk_ext.cpp CDetour/detours.cpp
+OBJECTS = extension.cpp sdk/smsdk_ext.cpp CDetour/detours.cpp asm/asm.c
 
 ##############################################
 ### CONFIGURE ANY OTHER FLAGS/OPTIONS HERE ###
@@ -200,8 +200,8 @@ all: check
 	mkdir -p $(BIN_DIR)
 	mkdir -p $(BIN_DIR)/sdk
 	mkdir -p $(BIN_DIR)/CDetour
-	ln -sf $(HL2LIB)/$(LIB_PREFIX)vstdlib$(LIB_SUFFIX)
-	ln -sf $(HL2LIB)/$(LIB_PREFIX)tier0$(LIB_SUFFIX)
+	cp -f $(HL2LIB)/$(LIB_PREFIX)vstdlib$(LIB_SUFFIX) $(LIB_PREFIX)vstdlib$(LIB_SUFFIX)
+	cp -f $(HL2LIB)/$(LIB_PREFIX)tier0$(LIB_SUFFIX) $(LIB_PREFIX)tier0$(LIB_SUFFIX)
 	$(MAKE) -f $(MAKEFILE_NAME) mms_ext
 
 check:
