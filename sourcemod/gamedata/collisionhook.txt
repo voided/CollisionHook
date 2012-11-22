@@ -5,7 +5,7 @@
 
 "Games"
 {
-	"tf"
+	"#default"
 	{
 		"Signatures"
 		{
