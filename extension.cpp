@@ -42,6 +42,9 @@ DETOUR_DECL_STATIC2( PassServerEntityFilterFunc, bool, const IHandleEntity *, pT
 	if ( pTouch == pPass )
 		return DETOUR_STATIC_CALL( PassServerEntityFilterFunc )( pTouch, pPass ); // self checks aren't interesting
 
+	if ( !pTouch || !pPass )
+		return DETOUR_STATIC_CALL( PassServerEntityFilterFunc )( pTouch, pPass ); // need two valid entities
+
 	CBaseEntity *pEnt1 = const_cast<CBaseEntity *>( UTIL_EntityFromEntityHandle( pTouch ) );
 	CBaseEntity *pEnt2 = const_cast<CBaseEntity *>( UTIL_EntityFromEntityHandle( pPass ) );
 

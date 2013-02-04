@@ -40,7 +40,7 @@
 /* Basic information exposed publicly */
 #define SMEXT_CONF_NAME			"CollisionHooks"
 #define SMEXT_CONF_DESCRIPTION	"Hook on entity collision"
-#define SMEXT_CONF_VERSION		"0.1"
+#define SMEXT_CONF_VERSION		"0.2"
 #define SMEXT_CONF_AUTHOR		"VoiDeD"
 #define SMEXT_CONF_URL			"http://saxtonhell.com"
 #define SMEXT_CONF_LOGTAG		"CLHOOK"
