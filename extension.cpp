@@ -142,7 +142,6 @@ IPhysicsEnvironment *CollisionHook::CreateEnvironment()
 
 	IPhysicsEnvironment *pEnvironment = SH_CALL( g_pPhysics, &IPhysics::CreateEnvironment )();
 
-	Assert( pEnvironment );
 	if ( !pEnvironment )
 		RETURN_META_VALUE( MRES_SUPERCEDE, pEnvironment ); // just in case
 
@@ -154,7 +153,6 @@ IPhysicsEnvironment *CollisionHook::CreateEnvironment()
 
 void CollisionHook::SetCollisionSolver( IPhysicsCollisionSolver *pSolver )
 {
-	Assert( pSolver );
 	if ( !pSolver )
 		RETURN_META( MRES_IGNORED ); // this shouldn't happen, but knowing valve...
 
