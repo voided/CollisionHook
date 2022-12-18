@@ -33,6 +33,8 @@ IPhysics *g_pPhysics = NULL;
 IForward *g_pCollisionFwd = NULL;
 IForward *g_pPassFwd = NULL;
 
+int gSetCollisionSolverHookId, gShouldCollideHookId;
+
 
 DETOUR_DECL_STATIC2( PassServerEntityFilterFunc, bool, const IHandleEntity *, pTouch, const IHandleEntity *, pPass )
 {
@@ -120,16 +122,19 @@ bool CollisionHook::SDK_OnMetamodLoad( ISmmAPI *ismm, char *error, size_t maxlen
 {
 	GET_V_IFACE_CURRENT( GetPhysicsFactory, g_pPhysics, IPhysics, VPHYSICS_INTERFACE_VERSION );
 
-	SH_ADD_HOOK( IPhysics, CreateEnvironment, g_pPhysics, SH_MEMBER( this, &CollisionHook::CreateEnvironment ), false );
+	SH_ADD_HOOK( IPhysics, CreateEnvironment, g_pPhysics, SH_MEMBER( this, &CollisionHook::CreateEnvironment ), true );
 
 	return true;
 }
 
 bool CollisionHook::SDK_OnMetamodUnload(char *error, size_t maxlength)
 {
-	SH_REMOVE_HOOK( IPhysics, CreateEnvironment, g_pPhysics, SH_MEMBER( this, &CollisionHook::CreateEnvironment ), false );
+	SH_REMOVE_HOOK( IPhysics, CreateEnvironment, g_pPhysics, SH_MEMBER( this, &CollisionHook::CreateEnvironment ), true );
+	SH_REMOVE_HOOK_ID( gSetCollisionSolverHookId );
+	SH_REMOVE_HOOK_ID( gShouldCollideHookId );
 
 	g_pPhysics = NULL;
+	gSetCollisionSolverHookId = gShouldCollideHookId = 0;
 
 	return true;
 }
@@ -140,13 +145,17 @@ IPhysicsEnvironment *CollisionHook::CreateEnvironment()
 	// in order to hook IPhysicsCollisionSolver::ShouldCollide, we need to know when a solver is installed
 	// in order to hook any installed solvers, we need to hook any created physics environments
 
-	IPhysicsEnvironment *pEnvironment = SH_CALL( g_pPhysics, &IPhysics::CreateEnvironment )();
+	IPhysicsEnvironment *pEnvironment = META_RESULT_ORIG_RET( IPhysicsEnvironment * );
 
 	if ( !pEnvironment )
 		RETURN_META_VALUE( MRES_SUPERCEDE, pEnvironment ); // just in case
 
-	// hook so we know when a solver is installed
-	SH_ADD_HOOK( IPhysicsEnvironment, SetCollisionSolver, pEnvironment, SH_MEMBER( this, &CollisionHook::SetCollisionSolver ), false );
+	// Hook globally so we know when any solver is installed
+	gSetCollisionSolverHookId = SH_ADD_VPHOOK( IPhysicsEnvironment, SetCollisionSolver, pEnvironment,
+		SH_MEMBER( this, &CollisionHook::SetCollisionSolver ), true );
+	
+	SH_REMOVE_HOOK( IPhysics, CreateEnvironment, g_pPhysics,
+		SH_MEMBER( this, &CollisionHook::CreateEnvironment ), true ); // No longer needed
 
 	RETURN_META_VALUE( MRES_SUPERCEDE, pEnvironment );
 }
@@ -156,8 +165,12 @@ void CollisionHook::SetCollisionSolver( IPhysicsCollisionSolver *pSolver )
 	if ( !pSolver )
 		RETURN_META( MRES_IGNORED ); // this shouldn't happen, but knowing valve...
 
-	// the game is installing a solver, hook the func we want
-	SH_ADD_HOOK( IPhysicsCollisionSolver, ShouldCollide, pSolver, SH_MEMBER( this, &CollisionHook::VPhysics_ShouldCollide ), false );
+	// The game installed a solver, globally hook ShouldCollide
+	gShouldCollideHookId = SH_ADD_VPHOOK( IPhysicsCollisionSolver, ShouldCollide, pSolver,
+		SH_MEMBER( this, &CollisionHook::VPhysics_ShouldCollide ), false );
+
+	SH_REMOVE_HOOK_ID( gSetCollisionSolverHookId ); // No longer needed
+	gSetCollisionSolverHookId = 0;
 
 	RETURN_META( MRES_IGNORED );
 }
