@@ -76,8 +76,6 @@ DETOUR_DECL_STATIC2( PassServerEntityFilterFunc, bool, const IHandleEntity *, pT
 
 bool CollisionHook::SDK_OnLoad( char *error, size_t maxlength, bool late )
 {
-	sharesys->RegisterLibrary( myself, "collisionhook" );
-
 	char szConfError[ 256 ] = "";
 	if ( !gameconfs->LoadGameConfigFile( "collisionhook", &g_pGameConf, szConfError, sizeof( szConfError ) ) )
 	{
@@ -98,6 +96,8 @@ bool CollisionHook::SDK_OnLoad( char *error, size_t maxlength, bool late )
 
 	g_pCollisionFwd = forwards->CreateForward( "CH_ShouldCollide", ET_Hook, 3, NULL, Param_Cell, Param_Cell, Param_CellByRef );
 	g_pPassFwd = forwards->CreateForward( "CH_PassFilter", ET_Hook, 3, NULL, Param_Cell, Param_Cell, Param_CellByRef );
+	
+	sharesys->RegisterLibrary( myself, "collisionhook" );
 
 	return true;
 }

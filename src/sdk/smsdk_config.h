@@ -38,7 +38,7 @@
  */
 
 /* Basic information exposed publicly */
-#define SMEXT_CONF_NAME			"CollisionHooks"
+#define SMEXT_CONF_NAME			"CollisionHook"
 #define SMEXT_CONF_DESCRIPTION	"Hook on entity collision"
 #define SMEXT_CONF_VERSION		"0.2"
 #define SMEXT_CONF_AUTHOR		"VoiDeD"
