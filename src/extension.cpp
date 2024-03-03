@@ -3,7 +3,7 @@
 #include "extension.h"
 
 #include "sourcehook.h"
-#include "detours.h"
+#include "CDetour/detours.h"
 
 #include "vphysics_interface.h"
 #include "ihandleentity.h"

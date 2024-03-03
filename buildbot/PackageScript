@@ -1,0 +1,59 @@
+# vim: set ts=2 sw=2 tw=99 noet ft=python:
+import os
+import shutil
+import ambuild.osutil as osutil
+from ambuild.command import Command
+
+builder.SetBuildFolder("package")
+
+
+def CreateFolders(folders):
+    dict = {}
+    for folder in folders:
+        path = os.path.normpath(folder)
+        dict[folder] = builder.AddFolder(path)
+    return dict
+
+
+def CopyFiles(src, dest, filter_ext=None):
+    source_path = os.path.join(builder.sourcePath, src)
+    if os.path.isfile(source_path):
+        builder.AddCopy(source_path, dest)
+        return
+    for entry in os.listdir(source_path):
+        entry_path = os.path.join(source_path, entry)
+        if not os.path.isfile(entry_path):
+            continue
+        if filter_ext:
+            _, ext = os.path.splitext(entry)
+            if filter_ext != ext:
+                continue
+        builder.AddCopy(entry_path, dest)
+
+
+folders = CreateFolders(
+    [
+        "addons/sourcemod/extensions",
+        "addons/sourcemod/extensions/x64",
+        "addons/sourcemod/gamedata",
+        "addons/sourcemod/scripting",
+        "addons/sourcemod/scripting/include",
+    ]
+)
+
+pdblog = open(os.path.join(builder.buildPath, "pdblog.txt"), "wt")
+for cxx_task in Extension.extensions:
+    if cxx_task.target.arch == "x86_64":
+        builder.AddCopy(cxx_task.binary, folders["addons/sourcemod/extensions/x64"])
+    else:
+        builder.AddCopy(cxx_task.binary, folders["addons/sourcemod/extensions"])
+    pdblog.write(cxx_task.debug.path + "\n")
+pdblog.close()
+
+CopyFiles("sourcemod/gamedata/collisionhook.txt", folders["addons/sourcemod/gamedata"])
+CopyFiles(
+    "sourcemod/scripting/include/collisionhook.inc",
+    folders["addons/sourcemod/scripting/include"],
+)
+
+debug_info = []
