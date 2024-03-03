@@ -160,6 +160,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         name: Upload artifacts
         if: github.event_name == 'push' && github.ref == 'refs/heads/action'
-        working-directory: extension/build/package
         with:
-          path: "${{ env.ZIP_FILENAME }}"
+          path: "extension/build/package/${{ env.ZIP_FILENAME }}"
