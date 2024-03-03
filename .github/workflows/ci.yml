@@ -107,7 +107,7 @@ jobs:
               if [ "${sdk}" == "tf2" ]; then
                 shallow_checkout "https://github.com/Kenzzer/hl2sdk" "tf2_win64" "hl2sdk-tf2"
               else
-              shallow_checkout "https://github.com/alliedmodders/hl2sdk" "${sdk}" "hl2sdk-${sdk}"
+                shallow_checkout "https://github.com/alliedmodders/hl2sdk" "${sdk}" "hl2sdk-${sdk}"
               fi
           done
 
@@ -158,5 +158,8 @@ jobs:
         run: zip -r "${{ env.ZIP_FILENAME }}" .
 
       - uses: actions/upload-artifact@v4
+        name: Upload artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/action'
+        working-directory: extension/build/package
         with:
           path: "${{ env.ZIP_FILENAME }}"
