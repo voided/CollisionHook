@@ -400,3 +400,7 @@ FodyWeavers.xsd
 # ignore temp/build directories
 msvc10/Debug*/
 msvc10/Release*/
+
+# AMBuild2 outputs
+includes/
+pdblog.txt
