@@ -625,6 +625,6 @@ if Extension.use_auto_versioning():
 
 builder.targets = builder.CloneableList(Extension.all_targets)
 # Add additional buildscripts here
-BuildScripts = ["src/AMBuilder", "buildbot/PackageScript", "buildbot/BreakpadSymbols"]
+BuildScripts = ["src/AMBuilder", "buildbot/PackageScript"]
 
 builder.Build(BuildScripts, {"Extension": Extension})
