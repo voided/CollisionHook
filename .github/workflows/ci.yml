@@ -143,24 +143,12 @@ jobs:
 
           PLATFORM="${{ runner.os }}"
           FILENAME="$(cat ./includes/filename_versioning.txt)"
-          ZIP_FILENAME="${{ env.PROJECT }}-${FILENAME}-${PLATFORM,}.zip"
 
-          echo "ZIP_FILENAME=${ZIP_FILENAME}" >> $GITHUB_ENV
           echo "ARTIFACT_NAME=${{ env.PROJECT }}-${FILENAME}-${PLATFORM,}" >> $GITHUB_ENV
-
-      - name: Package release - Windows
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && startsWith(matrix.os, 'windows-latest')
-        working-directory: extension/build/package
-        run: Compress-Archive -Path * -Destination ${{ env.ZIP_FILENAME }}
-
-      - name: Package release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && startsWith(matrix.os, 'ubuntu-latest')
-        working-directory: extension/build/package
-        run: zip -r "${{ env.ZIP_FILENAME }}" .
 
       - uses: actions/upload-artifact@v4
         name: Upload artifacts
         if: github.event_name == 'push' && github.ref == 'refs/heads/master' && (startsWith(matrix.os, 'windows-latest') || startsWith(matrix.os, 'ubuntu-latest'))
         with:
           name: "${{ env.ARTIFACT_NAME }}"
-          path: "extension/build/package/${{ env.ZIP_FILENAME }}"
+          path: "extension/build/package/"
