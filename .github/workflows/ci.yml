@@ -146,6 +146,7 @@ jobs:
           ZIP_FILENAME="${{ env.PROJECT }}-${FILENAME}-${PLATFORM,}.zip"
 
           echo "ZIP_FILENAME=${ZIP_FILENAME}" >> $GITHUB_ENV
+          echo "ARTIFACT_NAME=${{ env.PROJECT }}-${FILENAME}-${PLATFORM,}" >> $GITHUB_ENV
 
       - name: Package release - Windows
         if: github.event_name == 'push' && github.ref == 'refs/heads/master' && startsWith(matrix.os, 'windows-latest')
@@ -159,6 +160,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         name: Upload artifacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && (startsWith(matrix.os, 'windows-latest') || startsWith(matrix.os, 'ubuntu-latest'))
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         with:
+          name: "${{ env.ARTIFACT_NAME }}"
           path: "extension/build/package/${{ env.ZIP_FILENAME }}"
