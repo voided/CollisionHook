@@ -29,7 +29,7 @@ jobs:
 
     env:
       PROJECT: "collisionhook"
-      SDKS: "css hl2dm dods tf2"
+      SDKS: "css hl2dm dods tf2 l4d l4d2"
       MMSOURCE_VERSION: "1.11"
       SOURCEMOD_VERSION: "1.11"
       CACHE_PATH: ${{ github.workspace }}/cache
@@ -103,12 +103,7 @@ jobs:
           # Verify github cache, and see if we don't have the sdks already cloned and update them
           for sdk in ${{ env.SDKS }}
           do
-              # TODO: remove these conditionals once https://github.com/alliedmodders/hl2sdk/pull/198 is merged
-              if [ "${sdk}" == "tf2" ]; then
-                shallow_checkout "https://github.com/Kenzzer/hl2sdk" "tf2_win64" "hl2sdk-tf2"
-              else
-                shallow_checkout "https://github.com/alliedmodders/hl2sdk" "${sdk}" "hl2sdk-${sdk}"
-              fi
+              shallow_checkout "https://github.com/alliedmodders/hl2sdk" "${sdk}" "hl2sdk-${sdk}"
           done
 
           shallow_checkout "https://github.com/alliedmodders/ambuild" "master" "ambuild"
