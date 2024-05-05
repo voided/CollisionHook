@@ -39,8 +39,13 @@ IForward *g_pPassFwd = NULL;
 
 int gSetCollisionSolverHookId, gShouldCollideHookId;
 
-
+#if defined(__linux__) && defined(__i386__)
+CDetour* PassServerEntityFilterFuncDetour;
+__attribute__((regparm(2))) bool (*PassServerEntityFilterFunc_Actual)(const IHandleEntity*, const IHandleEntity*);
+__attribute__((regparm(2))) bool PassServerEntityFilterFunc(const IHandleEntity* pTouch, const IHandleEntity* pPass)
+#else
 DETOUR_DECL_STATIC2( PassServerEntityFilterFunc, bool, const IHandleEntity *, pTouch, const IHandleEntity *, pPass )
+#endif
 {
 	if ( g_pPassFwd->GetFunctionCount() == 0 )
 		return DETOUR_STATIC_CALL( PassServerEntityFilterFunc )( pTouch, pPass );
