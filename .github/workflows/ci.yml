@@ -26,8 +26,8 @@ jobs:
     env:
       PROJECT: "collisionhook"
       SDKS: "css hl2dm dods tf2 l4d l4d2"
-      MMSOURCE_VERSION: "1.11"
-      SOURCEMOD_VERSION: "1.11"
+      MMSOURCE_VERSION: "1.12"
+      SOURCEMOD_VERSION: "1.12"
       CACHE_PATH: ${{ github.workspace }}/cache
     steps:
       - name: Concatenate SDK Names
