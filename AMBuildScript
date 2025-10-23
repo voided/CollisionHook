@@ -574,10 +574,12 @@ class ExtensionConfig(object):
                 libs.append("interfaces")
             for lib in libs:
                 if compiler.target.arch == "x86":
-                    lib_path = os.path.join(sdk.path, "lib", "public", lib) + ".lib"
+                    lib_path = (
+                        os.path.join(sdk.path, "lib", "public", "x86", lib) + ".lib"
+                    )
                 elif compiler.target.arch == "x86_64":
                     lib_path = (
-                        os.path.join(sdk.path, "lib", "public", "win64", lib) + ".lib"
+                        os.path.join(sdk.path, "lib", "public", "x64", lib) + ".lib"
                     )
                 compiler.linkflags.append(lib_path)
 
