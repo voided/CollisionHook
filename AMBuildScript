@@ -515,7 +515,7 @@ class ExtensionConfig(object):
             elif (
                 sdk.name in ["tf2", "sdk2013", "bms"] and compiler.target.arch == "x86"
             ):
-                lib_folder = os.path.join(sdk.path, "lib", "public", "linux32")
+                lib_folder = os.path.join(sdk.path, "lib", "public", "linux")
             elif compiler.target.arch == "x86_64":
                 lib_folder = os.path.join(sdk.path, "lib", "public", "linux64")
             else:
