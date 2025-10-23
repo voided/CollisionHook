@@ -512,7 +512,7 @@ class ExtensionConfig(object):
         if compiler.target.platform == "linux":
             if sdk.name == "episode1":
                 lib_folder = os.path.join(sdk.path, "linux_sdk")
-            elif sdk.name in ["sdk2013", "bms"]:
+            elif sdk.name in ["tf2", "sdk2013", "bms"]:
                 lib_folder = os.path.join(sdk.path, "lib", "public", "linux32")
             elif compiler.target.arch == "x86_64":
                 lib_folder = os.path.join(sdk.path, "lib", "public", "linux64")
