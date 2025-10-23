@@ -573,14 +573,18 @@ class ExtensionConfig(object):
             if sdk.name in ["swarm", "blade", "insurgency", "doi", "csgo"]:
                 libs.append("interfaces")
             for lib in libs:
-                if compiler.target.arch == "x86":
-                    lib_path = (
-                        os.path.join(sdk.path, "lib", "public", "x86", lib) + ".lib"
-                    )
-                elif compiler.target.arch == "x86_64":
-                    lib_path = (
-                        os.path.join(sdk.path, "lib", "public", "x64", lib) + ".lib"
-                    )
+                if sdk.name in ["l4d", "l4d2"]:
+                    # l4d and l4d2 engines don't have 64-bit libs
+                    lib_path = os.path.join(sdk.path, "lib", "public", lib) + ".lib"
+                else:
+                    if compiler.target.arch == "x86":
+                        lib_path = (
+                            os.path.join(sdk.path, "lib", "public", "x86", lib) + ".lib"
+                        )
+                    elif compiler.target.arch == "x86_64":
+                        lib_path = (
+                            os.path.join(sdk.path, "lib", "public", "x64", lib) + ".lib"
+                        )
                 compiler.linkflags.append(lib_path)
 
         for library in dynamic_libs:
