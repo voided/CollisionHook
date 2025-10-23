@@ -515,7 +515,7 @@ class ExtensionConfig(object):
             elif sdk.name in ["sdk2013", "bms"]:
                 lib_folder = os.path.join(sdk.path, "lib", "public", "linux32")
             elif compiler.target.arch == "x86_64":
-                lib_folder = os.path.join(sdk.path, "lib", "linux64")
+                lib_folder = os.path.join(sdk.path, "lib", "public", "linux64")
             else:
                 lib_folder = os.path.join(sdk.path, "lib", "linux")
         elif compiler.target.platform == "mac":
