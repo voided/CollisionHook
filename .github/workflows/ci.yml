@@ -137,7 +137,7 @@ jobs:
 
           echo "ARTIFACT_NAME=${{ env.PROJECT }}-${FILENAME}-${PLATFORM,}" >> $GITHUB_ENV
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         name: Upload artifacts
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         with:
