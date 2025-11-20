@@ -57,7 +57,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         name: Repository checkout
         with:
           fetch-depth: 0
