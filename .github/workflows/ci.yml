@@ -7,139 +7,105 @@ on:
     branches: [master]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
+    name: ${{ matrix.name }} (x86 and x64)
+    runs-on: ${{ matrix.runner }}
     strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        include:
-          - os: ubuntu-latest
-            cc: clang
-            cxx: clang++
-          - os: windows-latest
-            cc: msvc
       fail-fast: false
-
-    name: ${{ matrix.os }} - ${{ matrix.cc }}
-    runs-on: ${{ matrix.os }}
+      matrix:
+        include:
+          - name: Linux
+            runner: ubuntu-22.04
+            extension: so
+          - name: Windows
+            runner: windows-2022
+            extension: dll
 
     env:
-      PROJECT: "collisionhook"
-      SDKS: "css hl2dm dods tf2 l4d l4d2"
-      MMSOURCE_VERSION: "1.11"
-      SOURCEMOD_VERSION: "1.11"
-      CACHE_PATH: ${{ github.workspace }}/cache
-    steps:
-      - name: Concatenate SDK Names
+      X86_SDKS: css dods hl2dm sdk2013 tf2 l4d l4d2 csgo
+      X64_SDKS: css dods hl2dm tf2
+
+    defaults:
+      run:
         shell: bash
-        run: |
-          # Paranoia
-          SDKS_VAR="${{env.SDKS}}"
-          # This will be used in our cache key
-          echo "SDKS_KEY=${SDKS_VAR//[[:blank:]]/}" >> $GITHUB_ENV
 
-      - name: Linux dependencies
-        if: startsWith(runner.os, 'Linux')
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            gcc-multilib g++-multilib libstdc++6 lib32stdc++6 \
-            libc6-dev libc6-dev-i386 linux-libc-dev \
-            linux-libc-dev:i386 lib32z1-dev ${{ matrix.cc }}
-
-      - uses: actions/setup-python@v6
-        name: Setup Python 3.9
-        with:
-          python-version: 3.9
-
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-
-      - uses: actions/checkout@v5
-        name: Repository checkout
+    steps:
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          path: extension
+          persist-credentials: false
 
-      - uses: actions/cache@v4
-        name: Cache dependencies
-        env:
-          cache-name: collisionhook-cache
+      - uses: actions/setup-python@v6
         with:
-          path: ${{ env.CACHE_PATH }}
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-sm${{ env.SOURCEMOD_VERSION }}-mmsource${{ env.MMSOURCE_VERSION }}-${{ env.SDKS_KEY }}
+          python-version: '3.14'
 
-      - shell: bash
-        name: Install dependencies
+      - name: Install Linux toolchain
+        if: runner.os == 'Linux'
         run: |
-          mkdir -p "${{ env.CACHE_PATH }}"
-          cd "${{ env.CACHE_PATH }}"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang g++-multilib
+          echo 'CC=clang' >> "$GITHUB_ENV"
+          echo 'CXX=clang++' >> "$GITHUB_ENV"
 
-          shallow_checkout () {
-              # Param 1 is origin
-              # Param 2 is branch
-              # Param 3 is name
-              if [ ! -d "$3" ]; then
-                  git clone "$1" --depth 1 --branch "$2" "$3"
-              fi
-              cd "$3"
-              git remote set-url origin "$1"
-              git fetch --depth 1 origin "$2"
-              git checkout --force --recurse-submodules FETCH_HEAD
-              git submodule init
-              git submodule update --depth 1
-              cd ..
-          }
+      - name: Fetch public build dependencies
+        run: |
+          HL2SDK_ROOT="$RUNNER_TEMP/collisionhook-deps"
+          echo "HL2SDK_ROOT=$HL2SDK_ROOT" >> "$GITHUB_ENV"
+          mkdir -p "$HL2SDK_ROOT"
+          git clone --depth 1 https://github.com/alliedmodders/ambuild "$HL2SDK_ROOT/ambuild"
+          git clone --depth 1 --branch 1.12-dev https://github.com/alliedmodders/metamod-source "$HL2SDK_ROOT/metamod-source"
+          git clone --depth 1 --branch 1.12-dev https://github.com/alliedmodders/sourcemod "$HL2SDK_ROOT/sourcemod"
+          git -C "$HL2SDK_ROOT/sourcemod" submodule update --init --depth 1 -- \
+            public/amtl public/safetyhook sourcepawn
 
-          # We are aware of what we are doing!
-          git config --global advice.detachedHead false
-
-          # Verify github cache, and see if we don't have the sdks already cloned and update them
-          for sdk in ${{ env.SDKS }}
-          do
-              shallow_checkout "https://github.com/alliedmodders/hl2sdk" "${sdk}" "hl2sdk-${sdk}"
+          for sdk in $X86_SDKS; do
+            git clone --depth 1 --branch "$sdk" https://github.com/alliedmodders/hl2sdk "$HL2SDK_ROOT/hl2sdk-$sdk"
           done
 
-          shallow_checkout "https://github.com/alliedmodders/ambuild" "master" "ambuild"
-          shallow_checkout "https://github.com/alliedmodders/sourcemod" "${{env.SOURCEMOD_VERSION}}-dev" "sourcemod"
-          shallow_checkout "https://github.com/alliedmodders/metamod-source/" "${{env.MMSOURCE_VERSION}}-dev" "metamod-source"
+          python -m pip install "$HL2SDK_ROOT/ambuild"
 
-          # But maybe others aren't (also probably unnecessary because git actions but paranoia)
-          git config --global advice.detachedHead true
-
-      - name: Setup AMBuild
-        shell: bash
-        run: |
-          cd "${{ env.CACHE_PATH }}"
-          python -m pip install ./ambuild
-
-      - name: Select clang compiler
-        if: startsWith(runner.os, 'Linux')
-        run: |
-          echo "CC=${{ matrix.cc }}" >> $GITHUB_ENV
-          echo "CXX=${{ matrix.cxx }}" >> $GITHUB_ENV
-          ${{ matrix.cc }} --version
-          ${{ matrix.cxx }} --version
-
-      - name: Build
-        shell: bash
-        working-directory: extension
+      - name: Build and package
         run: |
           mkdir build
           cd build
-          python ../configure.py --enable-auto-versioning --enable-optimize --sdks="${{ env.SDKS }}" --mms-path="${{ env.CACHE_PATH }}/metamod-source" --hl2sdk-root="${{ env.CACHE_PATH }}" --sm-path="${{ env.CACHE_PATH }}/sourcemod"
+          python ../configure.py --enable-auto-versioning --enable-optimize \
+            --targets=x86,x86_64 --sdks=all \
+            --hl2sdk-root="$HL2SDK_ROOT" --mms-path="$HL2SDK_ROOT/metamod-source" \
+            --sm-path="$HL2SDK_ROOT/sourcemod"
           ambuild
 
-          PLATFORM="${{ runner.os }}"
-          FILENAME="$(cat ./includes/filename_versioning.txt)"
+          platform="${RUNNER_OS,,}"
+          version="$(cat includes/filename_versioning.txt)"
+          echo "ARTIFACT_NAME=collisionhook-$version-$platform" >> "$GITHUB_ENV"
 
-          echo "ARTIFACT_NAME=${{ env.PROJECT }}-${FILENAME}-${PLATFORM,}" >> $GITHUB_ENV
+      - name: Verify package
+        env:
+          EXTENSION: ${{ matrix.extension }}
+        working-directory: build/package
+        run: |
+          require_file() {
+            if [[ ! -s "$1" ]]; then
+              echo "::error::Missing or empty package file: $1"
+              exit 1
+            fi
+          }
 
-      - uses: actions/upload-artifact@v5
-        name: Upload artifacts
-        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+          for sdk in $X86_SDKS; do
+            require_file "addons/sourcemod/extensions/collisionhook.ext.2.$sdk.$EXTENSION"
+          done
+          for sdk in $X64_SDKS; do
+            require_file "addons/sourcemod/extensions/x64/collisionhook.ext.2.$sdk.$EXTENSION"
+          done
+          require_file addons/sourcemod/gamedata/collisionhook.txt
+          require_file addons/sourcemod/scripting/include/collisionhook.inc
+
+      - uses: actions/upload-artifact@v7
+        if: github.event_name != 'pull_request'
         with:
-          name: "${{ env.ARTIFACT_NAME }}"
-          path: "extension/build/package/"
+          name: ${{ env.ARTIFACT_NAME }}
+          path: build/package/
+          if-no-files-found: error

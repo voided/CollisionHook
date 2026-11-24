@@ -40,27 +40,19 @@ IForward *g_pPassFwd = NULL;
 int gSetCollisionSolverHookId, gShouldCollideHookId;
 
 
-DETOUR_CUSTOM_STATIC2( PassServerEntityFilterFunc, bool, const IHandleEntity *, pTouch, const IHandleEntity *, pPass )
+static bool TryOverridePassFilter( const IHandleEntity *pTouch, const IHandleEntity *pPass, bool &shouldPass )
 {
-	if ( g_pPassFwd->GetFunctionCount() == 0 )
-		return DETOUR_STATIC_CALL( PassServerEntityFilterFunc )( pTouch, pPass );
+	if ( g_pPassFwd->GetFunctionCount() == 0 || pTouch == pPass || !pTouch || !pPass )
+		return false;
 
-	if ( pTouch == pPass )
-		return DETOUR_STATIC_CALL( PassServerEntityFilterFunc )( pTouch, pPass ); // self checks aren't interesting
-
-	if ( !pTouch || !pPass )
-		return DETOUR_STATIC_CALL( PassServerEntityFilterFunc )( pTouch, pPass ); // need two valid entities
-
-	CBaseEntity *pEnt1 = const_cast<CBaseEntity *>( UTIL_EntityFromEntityHandle( pTouch ) );
-	CBaseEntity *pEnt2 = const_cast<CBaseEntity *>( UTIL_EntityFromEntityHandle( pPass ) );
-
+	const CBaseEntity *pEnt1 = UTIL_EntityFromEntityHandle( pTouch );
+	const CBaseEntity *pEnt2 = UTIL_EntityFromEntityHandle( pPass );
 	if ( !pEnt1 || !pEnt2 )
-		return DETOUR_STATIC_CALL( PassServerEntityFilterFunc )( pTouch, pPass ); // we need both entities
+		return false;
 
-	cell_t ent1 = gamehelpers->EntityToBCompatRef( pEnt1 );
-	cell_t ent2 = gamehelpers->EntityToBCompatRef( pEnt2 );
+	cell_t ent1 = gamehelpers->EntityToBCompatRef( const_cast<CBaseEntity *>( pEnt1 ) );
+	cell_t ent2 = gamehelpers->EntityToBCompatRef( const_cast<CBaseEntity *>( pEnt2 ) );
 
-	// todo: do we want to fill result with with the game's result? perhaps the forward path is more performant...
 	cell_t result = 0;
 	g_pPassFwd->PushCell( ent1 );
 	g_pPassFwd->PushCell( ent2 );
@@ -68,17 +60,63 @@ DETOUR_CUSTOM_STATIC2( PassServerEntityFilterFunc, bool, const IHandleEntity *, 
 
 	cell_t retValue = 0;
 	g_pPassFwd->Execute( &retValue );
+	if ( retValue <= Pl_Continue )
+		return false;
 
-	if ( retValue > Pl_Continue )
-	{
-		// plugin wants to change the result
-		return result == 1;
-	}
+	shouldPass = result == 1;
+	return true;
+}
 
-	// otherwise, game decides
+#if SOURCE_ENGINE == SE_CSGO && defined(PLATFORM_WINDOWS)
+static bool (__fastcall *PassServerEntityFilterFunc_Actual)( const IHandleEntity *, const IHandleEntity * );
+static bool __fastcall PassServerEntityFilterFunc( const IHandleEntity *pTouch, const IHandleEntity *pPass )
+#else
+DETOUR_DECL_STATIC2( PassServerEntityFilterFunc, bool, const IHandleEntity *, pTouch, const IHandleEntity *, pPass )
+#endif
+{
+	bool shouldPass;
+	if ( TryOverridePassFilter( pTouch, pPass, shouldPass ) )
+		return shouldPass;
+
 	return DETOUR_STATIC_CALL( PassServerEntityFilterFunc )( pTouch, pPass );
 }
 
+#if defined(PLATFORM_LINUX) && defined(__i386__)
+// GCC's split-out .part.0 function takes its arguments in EAX and EDX on x86.
+static bool (*PassServerEntityFilterRegparm_Actual)( const IHandleEntity *, const IHandleEntity * ) __attribute__((regparm(2)));
+static bool __attribute__((regparm(2))) PassServerEntityFilterRegparm( const IHandleEntity *pTouch, const IHandleEntity *pPass )
+{
+	bool shouldPass;
+	if ( TryOverridePassFilter( pTouch, pPass, shouldPass ) )
+		return shouldPass;
+
+	return DETOUR_STATIC_CALL( PassServerEntityFilterRegparm )( pTouch, pPass );
+}
+#endif
+
+static CDetour *CreatePassFilterDetour()
+{
+#if defined(PLATFORM_LINUX)
+	void *optimizedAddress = nullptr;
+	if ( g_pGameConf->GetMemSig( "PassServerEntityFilterOptimized", &optimizedAddress ) && optimizedAddress )
+	{
+#if defined(__i386__)
+		return DETOUR_CREATE_STATIC( PassServerEntityFilterRegparm, optimizedAddress );
+#else
+		return DETOUR_CREATE_STATIC( PassServerEntityFilterFunc, optimizedAddress );
+#endif
+	}
+#endif
+	void *address = nullptr;
+	g_pGameConf->GetMemSig( "PassServerEntityFilter", &address );
+	if ( !address )
+		g_pGameConf->GetMemSig( "PassServerEntityFilterFallback", &address );
+
+	if ( !address )
+		return nullptr;
+
+	return DETOUR_CREATE_STATIC( PassServerEntityFilterFunc, address );
+}
 
 bool CollisionHook::SDK_OnLoad( char *error, size_t maxlength, bool late )
 {
@@ -91,18 +129,26 @@ bool CollisionHook::SDK_OnLoad( char *error, size_t maxlength, bool late )
 
 	CDetourManager::Init( g_pSM->GetScriptingEngine(), g_pGameConf );
 
-	g_pFilterDetour = DETOUR_CREATE_STATIC( PassServerEntityFilterFunc, "PassServerEntityFilter" );
+	g_pFilterDetour = CreatePassFilterDetour();
 	if ( !g_pFilterDetour )
 	{
 		V_snprintf( error, maxlength, "Unable to hook PassServerEntityFilter!" );
+		gameconfs->CloseGameConfigFile( g_pGameConf );
+		g_pGameConf = nullptr;
 		return false;
 	}
-
-	g_pFilterDetour->EnableDetour();
 
 	g_pCollisionFwd = forwards->CreateForward( "CH_ShouldCollide", ET_Hook, 3, NULL, Param_Cell, Param_Cell, Param_CellByRef );
 	g_pPassFwd = forwards->CreateForward( "CH_PassFilter", ET_Hook, 3, NULL, Param_Cell, Param_Cell, Param_CellByRef );
 	
+	g_pFilterDetour->EnableDetour();
+	if ( !g_pFilterDetour->IsEnabled() )
+	{
+		V_snprintf( error, maxlength, "Unable to enable the PassServerEntityFilter detour!" );
+		SDK_OnUnload();
+		return false;
+	}
+
 	sharesys->RegisterLibrary( myself, "collisionhook" );
 
 	return true;
@@ -110,20 +156,31 @@ bool CollisionHook::SDK_OnLoad( char *error, size_t maxlength, bool late )
 
 void CollisionHook::SDK_OnUnload()
 {
+	if ( g_pFilterDetour )
+	{
+		g_pFilterDetour->Destroy();
+		g_pFilterDetour = nullptr;
+	}
+
 	forwards->ReleaseForward( g_pCollisionFwd );
 	forwards->ReleaseForward( g_pPassFwd );
 
 	gameconfs->CloseGameConfigFile( g_pGameConf );
-
-	if ( g_pFilterDetour )
-	{
-		g_pFilterDetour->Destroy();
-		g_pFilterDetour = NULL;
-	}
+	g_pGameConf = nullptr;
 }
 
 bool CollisionHook::SDK_OnMetamodLoad( ISmmAPI *ismm, char *error, size_t maxlen, bool late )
 {
+#if SOURCE_ENGINE == SE_CSGO
+	IVEngineServer *engineServer = nullptr;
+	GET_V_IFACE_CURRENT( GetEngineFactory, engineServer, IVEngineServer, INTERFACEVERSION_VENGINESERVER );
+	if ( !engineServer->IsDedicatedServer() )
+	{
+		V_snprintf( error, maxlen, "CollisionHook requires a CS:GO dedicated server." );
+		return false;
+	}
+#endif
+
 	GET_V_IFACE_CURRENT( GetPhysicsFactory, g_pPhysics, IPhysics, VPHYSICS_INTERFACE_VERSION );
 
 	SH_ADD_HOOK( IPhysics, CreateEnvironment, g_pPhysics, SH_MEMBER( this, &CollisionHook::CreateEnvironment ), true );

@@ -12,14 +12,14 @@ SourceFolder = os.path.abspath(os.path.normpath(argv[0]))
 OutputFolder = os.path.normpath(argv[1])
 
 def run_and_return(argv):
-  text = subprocess.check_output(argv)
+  text = subprocess.check_output(argv, cwd=SourceFolder)
   if str != bytes:
     text = str(text, 'utf-8')
   return text.strip()
 
 def GetGHVersion():
 	p = run_and_return(['hg', 'parent', '-R', SourceFolder])
-	m = re.match('changeset:\s+(\d+):(.+)', p.stdoutText)
+	m = re.match(r'changeset:\s+(\d+):(.+)', p.stdoutText)
 	if m == None:
 		raise Exception('Could not determine repository version')
 	return m.groups()
@@ -38,7 +38,7 @@ rev, cset =  GetGitVersion()
 productFile = open(os.path.join(SourceFolder, 'product.version'), 'r')
 productContents = productFile.read()
 productFile.close()
-m = re.match('(\d+)\.(\d+)\.(\d+)(.*)', productContents)
+m = re.match(r'(\d+)\.(\d+)\.(\d+)(.*)', productContents)
 if m == None:
 	raise Exception('Could not detremine product version')
 major, minor, release, tag = m.groups()

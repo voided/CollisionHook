@@ -46,7 +46,7 @@ parser.options.add_argument(
     default="all",
     dest="sdks",
     help='Build against specified SDKs; valid args are "all", "present", or '
-    "space-delimited list of engine names (default: %default)",
+    "space-delimited list of engine names (default: %(default)s)",
 )
 parser.options.add_argument(
     "--targets",

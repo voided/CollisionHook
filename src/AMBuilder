@@ -1,5 +1,5 @@
 # vim: set sts=2 ts=8 sw=2 tw=99 et ft=python:
-import os, sys
+import os
 
 projectname = "collisionhook"
 
@@ -8,24 +8,47 @@ project.sources = [
     "extension.cpp",
     os.path.join(Extension.sm_root, "public", "smsdk_ext.cpp"),
     os.path.join(Extension.sm_root, "public", "CDetour", "detours.cpp"),
-    os.path.join(Extension.sm_root, "public", "asm", "asm.c"),
-    os.path.join(Extension.sm_root, "public", "libudis86", "decode.c"),
-    os.path.join(Extension.sm_root, "public", "libudis86", "itab.c"),
-    os.path.join(Extension.sm_root, "public", "libudis86", "syn-att.c"),
-    os.path.join(Extension.sm_root, "public", "libudis86", "syn-intel.c"),
-    os.path.join(Extension.sm_root, "public", "libudis86", "syn.c"),
-    os.path.join(Extension.sm_root, "public", "libudis86", "udis86.c"),
 ]
 
-for sdk_name in Extension.sdks:
-    sdk = Extension.sdks[sdk_name]
+# SourceMod 1.12's CDetour uses SafetyHook for instruction relocation.
+safetyhook_path = os.path.join(Extension.sm_root, "public", "safetyhook")
+safetyhook = builder.StaticLibraryProject("safetyhook")
+safetyhook.sources = [
+    os.path.join(safetyhook_path, "src", source)
+    for source in (
+        "allocator.cpp",
+        "easy.cpp",
+        "inline_hook.cpp",
+        "mid_hook.cpp",
+        "utility.cpp",
+        "vmt_hook.cpp",
+    )
+]
+safetyhook.sources += [os.path.join(safetyhook_path, "zydis", "Zydis.c")]
 
+for cxx in builder.targets:
+    binary = safetyhook.Configure(cxx, safetyhook.name, cxx.target.arch)
+    binary.sources += [
+        os.path.join(safetyhook_path, "src", "os." + cxx.target.platform + ".cpp"),
+    ]
+    binary.compiler.includes += [
+        os.path.join(safetyhook_path, "include"),
+        os.path.join(safetyhook_path, "zydis"),
+    ]
+    if cxx.target.platform == "linux":
+        binary.compiler.cflags += ["-fPIC"]
+
+safetyhook_libraries = {task.target.arch: task.binary for task in builder.Add(safetyhook)}
+
+for sdk in Extension.sdks.values():
     for cxx in builder.targets:
-        if not cxx.target.arch in sdk.platformSpec[cxx.target.platform]:
+        if cxx.target.arch not in sdk.platformSpec.get(cxx.target.platform, []):
             continue
 
         binary = Extension.HL2ExtConfig(
             project, builder, cxx, projectname + ".ext." + sdk.ext, sdk
         )
+        binary.compiler.cxxincludes += [os.path.join(safetyhook_path, "include")]
+        binary.compiler.linkflags += [safetyhook_libraries[cxx.target.arch]]
 
 Extension.extensions = builder.Add(project)

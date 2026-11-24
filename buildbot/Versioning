@@ -13,7 +13,8 @@ argv = [
 ]
 
 outputs = [
-  os.path.join(builder.buildFolder, 'includes', 'version_auto.h')
+  os.path.join(builder.buildFolder, 'includes', 'version_auto.h'),
+  os.path.join(builder.buildFolder, 'includes', 'filename_versioning.txt'),
 ]
 
 repo_head_path = os.path.join(builder.sourcePath, 'product.version')
@@ -33,13 +34,6 @@ sources = [
   repo_head_path,
   argv[1]
 ]
-
-for source in sources:
-  if not os.path.exists(source):
-    print(source)
-for source in sources:
-  if not os.path.exists(source):
-    print(source)
 
 output_nodes = builder.AddCommand(
   inputs=sources,
