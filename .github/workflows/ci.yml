@@ -11,7 +11,29 @@ permissions:
   contents: read
 
 jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.compute.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Compute version
+        id: compute
+        run: |
+          base_version=$(cat product.version)
+          if [[ ! "$base_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::product.version must contain a three-part numeric version."
+            exit 1
+          fi
+          echo "version=$base_version.$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: version
     name: ${{ matrix.name }} (x86 and x64)
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -28,6 +50,7 @@ jobs:
     env:
       X86_SDKS: css dods hl2dm sdk2013 tf2 l4d l4d2 csgo
       X64_SDKS: css dods hl2dm tf2
+      VERSION: ${{ needs.version.outputs.version }}
 
     defaults:
       run:
@@ -36,7 +59,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
           persist-credentials: false
 
       - uses: actions/setup-python@v6
@@ -60,7 +82,7 @@ jobs:
           git clone --depth 1 --branch 1.12-dev https://github.com/alliedmodders/metamod-source "$HL2SDK_ROOT/metamod-source"
           git clone --depth 1 --branch 1.12-dev https://github.com/alliedmodders/sourcemod "$HL2SDK_ROOT/sourcemod"
           git -C "$HL2SDK_ROOT/sourcemod" submodule update --init --depth 1 -- \
-            public/amtl public/safetyhook sourcepawn
+            hl2sdk-manifests public/amtl public/safetyhook sourcepawn
 
           for sdk in $X86_SDKS; do
             git clone --depth 1 --branch "$sdk" https://github.com/alliedmodders/hl2sdk "$HL2SDK_ROOT/hl2sdk-$sdk"
@@ -72,7 +94,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          python ../configure.py --enable-auto-versioning --enable-optimize \
+          python ../configure.py --version="$VERSION" --enable-optimize \
             --targets=x86,x86_64 --sdks=all \
             --hl2sdk-root="$HL2SDK_ROOT" --mms-path="$HL2SDK_ROOT/metamod-source" \
             --sm-path="$HL2SDK_ROOT/sourcemod"
@@ -80,7 +102,11 @@ jobs:
 
           platform="${RUNNER_OS,,}"
           version="$(cat includes/filename_versioning.txt)"
-          echo "ARTIFACT_NAME=collisionhook-$version-$platform" >> "$GITHUB_ENV"
+          if [[ "$version" != "$VERSION" ]]; then
+            echo "::error::AMBuild version $version differs from the release version $VERSION."
+            exit 1
+          fi
+          echo "ARTIFACT_NAME=collisionhook-$VERSION-$platform" >> "$GITHUB_ENV"
 
       - name: Verify package
         env:
@@ -109,3 +135,76 @@ jobs:
           name: ${{ env.ARTIFACT_NAME }}
           path: build/package/
           if-no-files-found: error
+          overwrite: true
+
+  release:
+    name: Release
+    needs: [version, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    concurrency:
+      group: release-${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download build packages
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          pattern: collisionhook-${{ env.VERSION }}-*
+
+      - name: Assemble release archives
+        run: |
+          linux="artifacts/collisionhook-$VERSION-linux"
+          windows="artifacts/collisionhook-$VERSION-windows"
+          if [[ ! -d "$linux/addons" || ! -d "$windows/addons" ]]; then
+            echo "::error::Expected one Linux package and one Windows package."
+            exit 1
+          fi
+
+          mkdir assets
+          tar -czf "assets/collisionhook-$VERSION-linux.tar.gz" -C "$linux" addons
+          (cd "$windows" && python3 -m zipfile -c \
+            "$GITHUB_WORKSPACE/assets/collisionhook-$VERSION-windows.zip" addons)
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$VERSION"
+          linux="collisionhook-$VERSION-linux.tar.gz"
+          windows="collisionhook-$VERSION-windows.zip"
+
+          tagged_commit=$(git rev-parse --verify --quiet "refs/tags/$tag^{commit}" || true)
+          if [[ -n "$tagged_commit" && "$tagged_commit" != "$GITHUB_SHA" ]]; then
+            echo "::error::$tag already points to a different commit."
+            exit 1
+          fi
+
+          # A rerun can reuse a complete release for the same commit.
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,assets > release.json 2>/dev/null; then
+            if [[ "$tagged_commit" == "$GITHUB_SHA" ]] && jq -e --arg linux "$linux" --arg windows "$windows" \
+              '.isDraft == false and ([.assets[].name] | index($linux) != null and index($windows) != null)' \
+              release.json > /dev/null; then
+              echo "Release $tag already has both archives."
+              exit 0
+            fi
+            echo "::error::Release $tag exists but is not a complete release for this commit."
+            exit 1
+          fi
+
+          gh release create "$tag" "assets/$linux" "assets/$windows" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "CollisionHook $VERSION" \
+            --notes "Automated release built from $GITHUB_SHA."

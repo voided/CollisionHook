@@ -1,61 +1,50 @@
-# vim: set ts=2 sw=2 tw=99 noet ft=python: 
-import os, sys
+"""Generate the extension's version header and package version."""
+
+import argparse
 import re
 import subprocess
+from pathlib import Path
 
-argv = sys.argv[1:]
-if len(argv) < 2:
-  sys.stderr.write('Usage: generate_header.py <source_path> <output_folder>\n')
-  sys.exit(1)
 
-SourceFolder = os.path.abspath(os.path.normpath(argv[0]))
-OutputFolder = os.path.normpath(argv[1])
+def generate_version(source, output, version):
+    if version:
+        tag = ""
+        unique_id = filename_version = version
+    else:
+        contents = (source / "product.version").read_text(encoding="utf-8")
+        match = re.match(r"([0-9]+\.[0-9]+\.[0-9]+)(.*)", contents)
+        if match is None:
+            raise ValueError("Could not determine the product version.")
+        version, tag = match.groups()
+        rev = subprocess.check_output(
+            ["git", "rev-list", "--count", "HEAD"], cwd=source, text=True
+        ).strip()
+        short_hash = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], cwd=source, text=True
+        ).strip()
+        unique_id = f"{rev}:{short_hash}"
+        filename_version = f"{version}-git{rev}-{short_hash}"
 
-def run_and_return(argv):
-  text = subprocess.check_output(argv, cwd=SourceFolder)
-  if str != bytes:
-    text = str(text, 'utf-8')
-  return text.strip()
+    parts = version.split(".")
+    parts += ["0"] * (4 - len(parts))
+    file_version = ",".join(str(int(part)) for part in parts)
+    (output / "version_auto.h").write_text(
+        f'''#pragma once
+#define SM_BUILD_TAG "{tag}"
+#define SM_BUILD_UNIQUEID "{unique_id}" SM_BUILD_TAG
+#define SM_VERSION "{version}"
+#define SM_FULL_VERSION SM_VERSION SM_BUILD_TAG
+#define SM_FILE_VERSION {file_version}
+''',
+        encoding="utf-8",
+    )
+    (output / "filename_versioning.txt").write_text(filename_version, encoding="utf-8")
 
-def GetGHVersion():
-	p = run_and_return(['hg', 'parent', '-R', SourceFolder])
-	m = re.match(r'changeset:\s+(\d+):(.+)', p.stdoutText)
-	if m == None:
-		raise Exception('Could not determine repository version')
-	return m.groups()
 
-def GetGitVersion():
-  revision_count = run_and_return(['git', 'rev-list', '--count', 'HEAD'])
-  revision_hash = run_and_return(['git', 'log', '--pretty=format:%h:%H', '-n', '1'])
-  shorthash, longhash = revision_hash.split(':')
-
-  return revision_count, shorthash
-
-rev = None
-cset = None 
-rev, cset =  GetGitVersion()
-
-productFile = open(os.path.join(SourceFolder, 'product.version'), 'r')
-productContents = productFile.read()
-productFile.close()
-m = re.match(r'(\d+)\.(\d+)\.(\d+)(.*)', productContents)
-if m == None:
-	raise Exception('Could not detremine product version')
-major, minor, release, tag = m.groups()
-
-incFile = open(os.path.join(OutputFolder, 'version_auto.h'), 'w')
-incFile.write("""
-#ifndef _AUTO_VERSION_INFORMATION_H_
-#define _AUTO_VERSION_INFORMATION_H_
-#define SM_BUILD_TAG	 	\"{0}\"
-#define SM_BUILD_UNIQUEID	\"{1}:{2}\" SM_BUILD_TAG
-#define SM_VERSION			\"{3}.{4}.{5}\"
-#define SM_FULL_VERSION		SM_VERSION SM_BUILD_TAG
-#define SM_FILE_VERSION		{6},{7},{8},0
-#endif /* _AUTO_VERSION_INFORMATION_H_ */
-""".format(tag, rev, cset, major, minor, release, major, minor, release))
-incFile.close()
-
-filename_versioning = open(os.path.join(OutputFolder, 'filename_versioning.txt'), 'w')
-filename_versioning.write("{0}.{1}.{2}-git{3}-{4}".format(major, minor, release, rev, cset))
-filename_versioning.close()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("source", type=Path)
+    parser.add_argument("output", type=Path)
+    parser.add_argument("version", nargs="?")
+    args = parser.parse_args()
+    generate_version(args.source, args.output, args.version)

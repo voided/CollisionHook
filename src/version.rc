@@ -7,7 +7,7 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 #pragma code_page(1252)
 #endif
 
-#ifndef SM_GENERATED_BUILD
+#ifndef BINARY_NAME
 #define BINARY_NAME "collisionhook.ext.dll\0"
 #endif
 

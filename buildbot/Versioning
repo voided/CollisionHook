@@ -1,44 +1,34 @@
-# vim: set ts=8 sts=2 sw=2 tw=99 et ft=python: 
-import os, sys
-import re
+import os
+import subprocess
+import sys
 
-builder.SetBuildFolder('/')
-includes = builder.AddFolder('includes')
+builder.SetBuildFolder("/")
+builder.AddFolder("includes")
 
-argv = [
-  sys.executable,
-  os.path.join(builder.sourcePath, 'buildbot', 'generate_header.py'),
-  os.path.join(builder.sourcePath),
-  os.path.join(builder.buildPath, 'includes'),
-]
+source = builder.sourcePath
+output = os.path.join(builder.buildPath, "includes")
+script = os.path.join(source, "buildbot", "generate_header.py")
+argv = [sys.executable, script, source, output]
+sources = [script]
+if builder.options.version:
+    argv.append(builder.options.version)
+else:
+    sources.append(os.path.join(source, "product.version"))
+    head_ref = subprocess.run(
+        ["git", "symbolic-ref", "--quiet", "HEAD"], cwd=source, text=True, capture_output=True
+    ).stdout.strip()
+    for ref in ("HEAD", head_ref):
+        if not ref:
+            continue
+        path = subprocess.check_output(
+            ["git", "rev-parse", "--git-path", ref], cwd=source, text=True
+        ).strip()
+        path = os.path.join(source, path)
+        if os.path.isfile(path):
+            sources.append(path)
 
-outputs = [
-  os.path.join(builder.buildFolder, 'includes', 'version_auto.h'),
-  os.path.join(builder.buildFolder, 'includes', 'filename_versioning.txt'),
-]
-
-repo_head_path = os.path.join(builder.sourcePath, 'product.version')
-if os.path.exists(os.path.join(builder.sourcePath, '.git')):
-  with open(os.path.join(builder.sourcePath, '.git', 'HEAD')) as fp:
-    head_contents = fp.read().strip()
-    if re.search('^[a-fA-F0-9]{40}$', head_contents):
-      repo_head_path = os.path.join(builder.sourcePath, '.git', 'HEAD')
-    else:
-      git_state = head_contents.split(':')[1].strip()
-      repo_head_path = os.path.join(builder.sourcePath, '.git', git_state)
-      if not os.path.exists(repo_head_path):
-        repo_head_path = os.path.join(builder.sourcePath, '.git', 'HEAD')
-
-sources = [
-  os.path.join(builder.sourcePath, 'product.version'),
-  repo_head_path,
-  argv[1]
-]
-
-output_nodes = builder.AddCommand(
-  inputs=sources,
-  argv=argv,
-  outputs=outputs
+rvalue = builder.AddCommand(
+    inputs=sources,
+    argv=argv,
+    outputs=["includes/version_auto.h", "includes/filename_versioning.txt"],
 )
-
-rvalue = output_nodes

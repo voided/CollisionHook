@@ -1,8 +1,22 @@
 # vim: set sts=2 ts=8 sw=2 tw=99 et:
+import argparse
+import re
 import sys
-from ambuild2 import run
 
-# Simple extensions do not need to modify this file.
+try:
+    from ambuild2 import run
+except ImportError:
+    sys.exit("Install AMBuild 2.2 or newer from https://github.com/alliedmodders/ambuild.")
+
+if getattr(run, "CURRENT_API", "2.1").startswith("2.1"):
+    sys.exit("AMBuild 2.2 or newer is required.")
+
+
+def release_version(value):
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?", value):
+        raise argparse.ArgumentTypeError("expected MAJOR.MINOR.PATCH[.BUILD]")
+    return value
+
 
 parser = run.BuildParser(sourcePath=sys.path[0], api="2.2")
 
@@ -39,6 +53,11 @@ parser.options.add_argument(
     dest="disable_auto_versioning",
     default=True,
     help="Enables the auto versioning script",
+)
+parser.options.add_argument(
+    "--version",
+    type=release_version,
+    help="Override the version baked into the extension and used in package names",
 )
 parser.options.add_argument(
     "-s",

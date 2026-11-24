@@ -22,10 +22,15 @@ signatures.
 The [GitHub Actions workflow](.github/workflows/ci.yml) builds and verifies
 packages on GitHub-hosted runners using public AlliedModders dependencies.
 Linux packages are built on Ubuntu 22.04 for glibc 2.35 compatibility.
+When both builds pass on a push to `master`, the workflow publishes a Linux
+`.tar.gz` and a Windows `.zip` under the tag `v<product.version>.<commit count>`.
+The extension binaries report that same version.
+
 Local builds use AMBuild, a C++17 compiler, the matching HL2SDK branches, and
 the `1.12-dev` branches of SourceMod and Metamod:Source. Initialize SourceMod's
-`public/amtl`, `public/safetyhook`, and `sourcepawn` submodules before running
-`configure.py`.
+`hl2sdk-manifests`, `public/amtl`, `public/safetyhook`, and `sourcepawn` submodules
+before running `configure.py`. Pass `--version MAJOR.MINOR.PATCH[.BUILD]` to
+set the version reported by the extension.
 
 Install the package's `addons/` tree into the game directory so it merges with the
 existing SourceMod installation. Match the extension architecture to the game

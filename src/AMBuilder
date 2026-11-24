@@ -1,54 +1,88 @@
-# vim: set sts=2 ts=8 sw=2 tw=99 et ft=python:
 import os
 
-projectname = "collisionhook"
-
-project = builder.LibraryProject(projectname + ".ext")
-project.sources = [
-    "extension.cpp",
-    os.path.join(Extension.sm_root, "public", "smsdk_ext.cpp"),
-    os.path.join(Extension.sm_root, "public", "CDetour", "detours.cpp"),
-]
-
-# SourceMod 1.12's CDetour uses SafetyHook for instruction relocation.
-safetyhook_path = os.path.join(Extension.sm_root, "public", "safetyhook")
+sm_public = os.path.join(Extension.sm_root, "public")
+safetyhook_path = os.path.join(sm_public, "safetyhook")
 safetyhook = builder.StaticLibraryProject("safetyhook")
 safetyhook.sources = [
     os.path.join(safetyhook_path, "src", source)
     for source in (
-        "allocator.cpp",
-        "easy.cpp",
-        "inline_hook.cpp",
-        "mid_hook.cpp",
-        "utility.cpp",
-        "vmt_hook.cpp",
+        "allocator.cpp", "easy.cpp", "inline_hook.cpp",
+        "mid_hook.cpp", "utility.cpp", "vmt_hook.cpp",
     )
 ]
 safetyhook.sources += [os.path.join(safetyhook_path, "zydis", "Zydis.c")]
 
-for cxx in builder.targets:
+# Build one SafetyHook library per architecture with its own compiler flags.
+for cxx in Extension.targets:
     binary = safetyhook.Configure(cxx, safetyhook.name, cxx.target.arch)
-    binary.sources += [
-        os.path.join(safetyhook_path, "src", "os." + cxx.target.platform + ".cpp"),
-    ]
-    binary.compiler.includes += [
+    compiler = binary.compiler
+    platform = compiler.target.platform
+    binary.sources += [os.path.join(safetyhook_path, "src", f"os.{platform}.cpp")]
+    compiler.includes += [
         os.path.join(safetyhook_path, "include"),
         os.path.join(safetyhook_path, "zydis"),
     ]
-    if cxx.target.platform == "linux":
-        binary.compiler.cflags += ["-fPIC"]
+    if Extension.debug:
+        compiler.defines += ["DEBUG", "_DEBUG"]
+    if Extension.optimize:
+        compiler.defines += ["NDEBUG"]
+    if platform == "windows":
+        compiler.cflags += ["/W4", "/MTd" if Extension.debug else "/MT"]
+        compiler.cxxflags += ["/EHsc", "/permissive-", "/std:c++17"]
+        if Extension.optimize:
+            compiler.cflags += ["/Ox", "/Zo"]
+        if Extension.debug:
+            compiler.cflags += ["/Od", "/RTC1"]
+    else:
+        compiler.defines += ["_FILE_OFFSET_BITS=64"]
+        compiler.cflags += ["-fPIC", "-Wall", "-Wno-unused-function", "-Wno-unused-const-variable"]
+        compiler.cxxflags += ["-std=c++17", "-Wno-format"]
+        if Extension.optimize:
+            compiler.cflags += ["-O3"]
 
 safetyhook_libraries = {task.target.arch: task.binary for task in builder.Add(safetyhook)}
+project = builder.LibraryProject("collisionhook.ext")
+project.sources = [
+    "extension.cpp",
+    os.path.join(sm_public, "smsdk_ext.cpp"),
+    os.path.join(sm_public, "CDetour", "detours.cpp"),
+]
+engine_defines = [f"SE_{sdk['define']}={sdk['code']}" for sdk in SdkHelpers.sdk_manifests]
 
-for sdk in Extension.sdks.values():
-    for cxx in builder.targets:
-        if cxx.target.arch not in sdk.platformSpec.get(cxx.target.platform, []):
-            continue
+for target in SdkHelpers.sdk_targets:
+    sdk = target.sdk
+    arch = target.cxx.target.arch
+    name = f"{project.name}.{sdk['extension']}"
+    binary = project.Configure(target.cxx, name, f"{Extension.tag} - {sdk['name']} {arch}")
+    compiler = binary.compiler
+    compiler.defines += engine_defines
+    if sdk["name"] == "csgo":
+        compiler.defines += ["NETWORK_VARS_ENABLED"]
+    if compiler.target.platform == "linux" and sdk["name"] in ("l4d", "csgo"):
+        compiler.defines += [
+            "stricmp=strcasecmp", "_stricmp=strcasecmp",
+            "_snprintf=snprintf", "_vsnprintf=vsnprintf",
+        ]
+    SdkHelpers.configureCxx(builder, binary, sdk)
+    compiler.cxxincludes += [
+        builder.currentSourcePath,
+        sm_public,
+        os.path.join(sm_public, "extensions"),
+        os.path.join(sm_public, "amtl"),
+        os.path.join(sm_public, "amtl", "amtl"),
+        os.path.join(Extension.sm_root, "sourcepawn", "include"),
+        os.path.join(Extension.mms_root, "core"),
+        os.path.join(Extension.mms_root, "core", "sourcehook"),
+        os.path.join(safetyhook_path, "include"),
+    ]
+    compiler.linkflags += [safetyhook_libraries[arch]]
+    if Extension.generated_headers:
+        compiler.defines += ["SM_GENERATED_BUILD"]
+        compiler.includes += [os.path.join(builder.buildPath, "includes")]
+        compiler.sourcedeps += Extension.generated_headers
 
-        binary = Extension.HL2ExtConfig(
-            project, builder, cxx, projectname + ".ext." + sdk.ext, sdk
-        )
-        binary.compiler.cxxincludes += [os.path.join(safetyhook_path, "include")]
-        binary.compiler.linkflags += [safetyhook_libraries[cxx.target.arch]]
+    if compiler.target.platform == "windows":
+        binary.sources += ["version.rc"]
+        compiler.rcdefines += [f'BINARY_NAME="{name}.dll"', "RC_COMPILE"]
 
 Extension.extensions = builder.Add(project)
