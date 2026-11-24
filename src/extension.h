@@ -98,13 +98,4 @@ public: // hooks
 
 };
 
-// adapted from util_shared.h
-inline const CBaseEntity *UTIL_EntityFromEntityHandle( const IHandleEntity *pConstHandleEntity )
-{
-	IHandleEntity *pHandleEntity = const_cast<IHandleEntity *>( pConstHandleEntity );
-	IServerUnknown *pUnk = static_cast<IServerUnknown *>( pHandleEntity );
-
-	return pUnk->GetBaseEntity();
-}
-
 #endif // _INCLUDE_COLLISIONHOOK_EXTENSION_H_
