@@ -34,16 +34,21 @@ jobs:
 
   build:
     needs: version
-    name: ${{ matrix.name }} (x86 and x64)
-    runs-on: ${{ matrix.runner }}
+    name: sm${{ matrix.sm.label }}-${{ matrix.target.os_name }} (x86 and x64)
+    runs-on: ${{ matrix.target.runner }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: Linux
+        sm:
+          - label: '1.12'
+            branch: 1.12-dev
+          - label: '1.13'
+            branch: master
+        target:
+          - os_name: linux
             runner: ubuntu-22.04
             extension: so
-          - name: Windows
+          - os_name: windows
             runner: windows-2022
             extension: dll
 
@@ -51,6 +56,7 @@ jobs:
       X86_SDKS: css dods hl2dm sdk2013 tf2 l4d l4d2 csgo
       X64_SDKS: css dods hl2dm tf2
       VERSION: ${{ needs.version.outputs.version }}
+      SM_BRANCH: ${{ matrix.sm.branch }}
 
     defaults:
       run:
@@ -80,7 +86,7 @@ jobs:
           mkdir -p "$HL2SDK_ROOT"
           git clone --depth 1 https://github.com/alliedmodders/ambuild "$HL2SDK_ROOT/ambuild"
           git clone --depth 1 --branch 1.12-dev https://github.com/alliedmodders/metamod-source "$HL2SDK_ROOT/metamod-source"
-          git clone --depth 1 --branch 1.12-dev https://github.com/alliedmodders/sourcemod "$HL2SDK_ROOT/sourcemod"
+          git clone --depth 1 --branch "$SM_BRANCH" https://github.com/alliedmodders/sourcemod "$HL2SDK_ROOT/sourcemod"
           git -C "$HL2SDK_ROOT/sourcemod" submodule update --init --depth 1 -- \
             hl2sdk-manifests public/amtl public/safetyhook sourcepawn
 
@@ -100,17 +106,15 @@ jobs:
             --sm-path="$HL2SDK_ROOT/sourcemod"
           ambuild
 
-          platform="${RUNNER_OS,,}"
           version="$(cat includes/filename_versioning.txt)"
           if [[ "$version" != "$VERSION" ]]; then
             echo "::error::AMBuild version $version differs from the release version $VERSION."
             exit 1
           fi
-          echo "ARTIFACT_NAME=collisionhook-$VERSION-$platform" >> "$GITHUB_ENV"
 
       - name: Verify package
         env:
-          EXTENSION: ${{ matrix.extension }}
+          EXTENSION: ${{ matrix.target.extension }}
         working-directory: build/package
         run: |
           require_file() {
@@ -132,7 +136,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: github.event_name != 'pull_request'
         with:
-          name: ${{ env.ARTIFACT_NAME }}
+          name: collisionhook-${{ env.VERSION }}-sm${{ matrix.sm.label }}-${{ matrix.target.os_name }}
           path: build/package/
           if-no-files-found: error
           overwrite: true
@@ -164,25 +168,32 @@ jobs:
 
       - name: Assemble release archives
         run: |
-          linux="artifacts/collisionhook-$VERSION-linux"
-          windows="artifacts/collisionhook-$VERSION-windows"
-          if [[ ! -d "$linux/addons" || ! -d "$windows/addons" ]]; then
-            echo "::error::Expected one Linux package and one Windows package."
-            exit 1
-          fi
-
           mkdir assets
-          tar -czf "assets/collisionhook-$VERSION-linux.tar.gz" -C "$linux" addons
-          (cd "$windows" && python3 -m zipfile -c \
-            "$GITHUB_WORKSPACE/assets/collisionhook-$VERSION-windows.zip" addons)
+          for sm in 1.12 1.13; do
+            package="collisionhook-$VERSION-sm$sm"
+            linux="artifacts/$package-linux"
+            windows="artifacts/$package-windows"
+            if [[ ! -d "$linux/addons" || ! -d "$windows/addons" ]]; then
+              echo "::error::Missing Linux or Windows package for SourceMod $sm."
+              exit 1
+            fi
+
+            tar -czf "assets/$package-linux.tar.gz" -C "$linux" addons
+            (cd "$windows" && python3 -m zipfile -c \
+              "$GITHUB_WORKSPACE/assets/$package-windows.zip" addons)
+          done
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="v$VERSION"
-          linux="collisionhook-$VERSION-linux.tar.gz"
-          windows="collisionhook-$VERSION-windows.zip"
+          assets=()
+          for sm in 1.12 1.13; do
+            assets+=("assets/collisionhook-$VERSION-sm$sm-linux.tar.gz"
+                    "assets/collisionhook-$VERSION-sm$sm-windows.zip")
+          done
+          expected_names=$(jq -n --args '$ARGS.positional' "${assets[@]##*/}")
 
           tagged_commit=$(git rev-parse --verify --quiet "refs/tags/$tag^{commit}" || true)
           if [[ -n "$tagged_commit" && "$tagged_commit" != "$GITHUB_SHA" ]]; then
@@ -193,10 +204,10 @@ jobs:
           # A rerun can reuse a complete release for the same commit.
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
             --json isDraft,assets > release.json 2>/dev/null; then
-            if [[ "$tagged_commit" == "$GITHUB_SHA" ]] && jq -e --arg linux "$linux" --arg windows "$windows" \
-              '.isDraft == false and ([.assets[].name] | index($linux) != null and index($windows) != null)' \
+            if [[ "$tagged_commit" == "$GITHUB_SHA" ]] && jq -e --argjson expected "$expected_names" \
+              '.isDraft == false and (($expected - [.assets[].name]) | length == 0)' \
               release.json > /dev/null; then
-              echo "Release $tag already has both archives."
+              echo "Release $tag already has all archives."
               exit 0
             fi
             echo "::error::Release $tag exists but is not a complete release for this commit."
@@ -212,8 +223,8 @@ jobs:
             fi
           fi
 
-          gh release create "$tag" "assets/$linux" "assets/$windows" \
+          gh release create "$tag" "${assets[@]}" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "CollisionHook $VERSION" \
-            --notes "Automated release built from $GITHUB_SHA."
+            --notes "Automated release built from $GITHUB_SHA. Download the package matching your SourceMod version and server OS."
