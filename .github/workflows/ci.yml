@@ -203,6 +203,15 @@ jobs:
             exit 1
           fi
 
+          # The Actions token cannot create a tag with workflow files that differ from master.
+          if [[ -z "$tagged_commit" ]]; then
+            git fetch --no-tags origin "$GITHUB_REF"
+            if ! git diff --quiet "$GITHUB_SHA" FETCH_HEAD -- .github/workflows/; then
+              echo "::notice::Skipping $tag because the workflow files on master have changed."
+              exit 0
+            fi
+          fi
+
           gh release create "$tag" "assets/$linux" "assets/$windows" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
